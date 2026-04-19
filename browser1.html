@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Windows 12 Web</title>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;user-select:none;}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#0a1628,#0d2144,#1a0a2e);color:white;height:100vh;overflow:hidden;position:relative;}
+#desktop{width:100%;height:calc(100vh - 56px);padding:16px;display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px;}
+.desk-icon{width:80px;text-align:center;padding:8px 4px;border-radius:8px;cursor:pointer;transition:background .15s;}
+.desk-icon:hover{background:rgba(255,255,255,.15);}
+.desk-icon .ico{font-size:30px;display:block;margin-bottom:4px;}
+.desk-icon span{font-size:11px;word-break:break-word;display:block;}
+.taskbar{position:fixed;bottom:0;left:0;right:0;height:56px;background:rgba(10,16,40,.85);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;padding:0 12px;gap:6px;z-index:10000;}
+.tb-btn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;font-size:20px;transition:background .15s;position:relative;flex-shrink:0;}
+.tb-btn:hover{background:rgba(255,255,255,.15);}
+.tb-btn.active::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:16px;height:3px;border-radius:2px;background:#60a5fa;}
+.start-btn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;font-size:22px;margin-right:4px;transition:background .15s;flex-shrink:0;}
+.start-btn:hover{background:rgba(255,255,255,.15);}
+.clock{margin-left:auto;font-size:12px;text-align:right;color:rgba(255,255,255,.85);flex-shrink:0;line-height:1.4;}
+.start-menu{position:fixed;bottom:62px;left:50%;transform:translateX(-50%);width:380px;background:rgba(15,20,45,.97);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:20px;display:none;z-index:9999;}
+.start-menu h3{font-size:12px;color:rgba(255,255,255,.45);margin-bottom:12px;font-weight:400;text-transform:uppercase;letter-spacing:.08em;}
+.start-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.start-app{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:8px;cursor:pointer;transition:background .15s;}
+.start-app:hover{background:rgba(255,255,255,.12);}
+.start-app .ico{font-size:26px;}
+.start-app span{font-size:11px;text-align:center;}
+.win{position:absolute;min-width:320px;min-height:200px;background:#1e1e2e;border:1px solid rgba(255,255,255,.12);border-radius:10px;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.6);overflow:hidden;}
+.win.minimized{display:none!important;}
+.titlebar{background:#2a2a3e;padding:0 12px;height:36px;display:flex;align-items:center;cursor:move;flex-shrink:0;gap:8px;}
+.titlebar .title{font-size:13px;flex:1;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.winbtns{display:flex;gap:6px;}
+.winbtn{width:12px;height:12px;border-radius:50%;cursor:pointer;border:none;display:flex;align-items:center;justify-content:center;font-size:9px;color:transparent;transition:color .1s;}
+.winbtn:hover{color:rgba(0,0,0,.7);}
+.winbtn.close{background:#ff5f57;}
+.winbtn.min{background:#febc2e;}
+.winbtn.max{background:#28c840;}
+.wincontent{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+textarea,input[type=text]{background:#0d1117;color:#e6edf3;border:1px solid rgba(255,255,255,.12);border-radius:4px;font-family:'Cascadia Code',monospace;font-size:13px;padding:8px;outline:none;resize:none;}
+textarea:focus,input[type=text]:focus{border-color:rgba(96,165,250,.6);}
+button{background:rgba(96,165,250,.15);color:#93c5fd;border:1px solid rgba(96,165,250,.3);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;transition:background .15s;white-space:nowrap;}
+button:hover{background:rgba(96,165,250,.3);}
+select{background:#1a1a2e;color:white;border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:4px 8px;font-size:12px;}
+.output-box{background:#0d1117;color:#4ade80;font-family:'Cascadia Code',monospace;font-size:12px;padding:10px;overflow:auto;white-space:pre-wrap;word-break:break-all;}
+.file-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;}
+.file-item:hover{background:rgba(255,255,255,.08);}
+.file-item.selected{background:rgba(96,165,250,.2);}
+.context-menu{position:fixed;background:rgba(25,25,45,.97);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:4px;z-index:99999;min-width:140px;display:none;}
+.context-menu div{padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px;}
+.context-menu div:hover{background:rgba(255,255,255,.12);}
+</style>
+</head>
+<body>
+
+<div id="desktop"></div>
+<div class="taskbar" id="taskbar">
+  <div class="start-btn" onclick="toggleStart()" title="Start">⊞</div>
+  <div id="tb-icons" style="display:flex;gap:6px;align-items:center;overflow:hidden;"></div>
+  <div class="clock" id="clock"></div>
+</div>
+<div class="start-menu" id="startMenu">
+  <h3>Apps</h3>
+  <div class="start-grid" id="startGrid"></div>
+</div>
+<div class="context-menu" id="ctxMenu"></div>
+
+<script>
+const APPS=[
+  {id:'code',  icon:'💻', name:'Code Editor'},
+  {id:'files', icon:'📁', name:'Files'},
+  {id:'browser',icon:'🌐',name:'Browser'},
+  {id:'notepad',icon:'📝',name:'Notepad'},
+  {id:'calc',  icon:'🔢', name:'Calculator'},
+  {id:'snake', icon:'🐍', name:'Snake'},
+  {id:'pong',  icon:'🏓', name:'Pong'},
+  {id:'paint', icon:'🎨', name:'Paint'},
+  {id:'sysinfo',icon:'ℹ️',name:'System Info'},
+];
+
+// Virtual file system
+const FS={
+  'Documents':{type:'folder',children:{
+    'readme.txt':{type:'file',content:'Welcome to Windows 12 Web!\n\nThis is a browser-based OS simulation.\nDouble-click files to open them.'},
+    'hello.py':  {type:'file',content:'# Python example\nfor i in range(5):\n    print(f"Hello #{i+1}")'},
+    'demo.html': {type:'file',content:'<h1 style="color:hotpink">Hello World!</h1>\n<p>This renders as HTML in the Code Editor.</p>'},
+  }},
+  'Downloads':{type:'folder',children:{}},
+  'Pictures':  {type:'folder',children:{}},
+  'Desktop':   {type:'folder',children:{}},
+};
+
+let zTop=100, wins={}, winCount=0, pyodide=null, pyReady=false;
+
+// Clock
+function pad(n){return String(n).padStart(2,'0');}
+function tick(){
+  const d=new Date();
+  document.getElementById('clock').innerHTML=
+    `${pad(d.getHours())}:${pad(d.getMinutes())}<br><span style="font-size:10px;opacity:.7">${d.toLocaleDateString('en',{month:'short',day:'numeric'})}</span>`;
+}
+tick(); setInterval(tick,10000);
+
+// Load Python
+(async()=>{
+  try{
+    pyodide=await loadPyodide({indexURL:'https://cdn.jsdelivr.net/pyodide/v0.23.4/full/'});
+    pyReady=true;
+    document.querySelectorAll('.py-status').forEach(el=>el.textContent='Python ready ✓');
+  }catch(e){console.warn('Pyodide failed',e);}
+})();
+
+// Build desktop & taskbar
+function buildUI(){
+  const desk=document.getElementById('desktop');
+  const tbIcons=document.getElementById('tb-icons');
+  const sg=document.getElementById('startGrid');
+  desk.innerHTML=''; tbIcons.innerHTML=''; sg.innerHTML='';
+  APPS.forEach(a=>{
+    // Desktop icon
+    const di=document.createElement('div');
+    di.className='desk-icon';
+    di.innerHTML=`<span class="ico">${a.icon}</span><span>${a.name}</span>`;
+    di.ondblclick=()=>openApp(a.id);
+    desk.appendChild(di);
+    // Taskbar icon
+    const tb=document.createElement('div');
+    tb.className='tb-btn'; tb.id='tb-'+a.id; tb.title=a.name;
+    tb.innerHTML=a.icon;
+    tb.onclick=()=>focusOrOpen(a.id);
+    tbIcons.appendChild(tb);
+    // Start grid
+    const sa=document.createElement('div');
+    sa.className='start-app';
+    sa.innerHTML=`<span class="ico">${a.icon}</span><span>${a.name}</span>`;
+    sa.onclick=()=>{openApp(a.id);closeStart();};
+    sg.appendChild(sa);
+  });
+}
+buildUI();
+
+function toggleStart(){
+  const m=document.getElementById('startMenu');
+  m.style.display=m.style.display==='block'?'none':'block';
+}
+function closeStart(){document.getElementById('startMenu').style.display='none';}
+document.addEventListener('click',e=>{
+  const m=document.getElementById('startMenu');
+  if(!m.contains(e.target)&&!e.target.closest('.start-btn'))m.style.display='none';
+  document.getElementById('ctxMenu').style.display='none';
+});
+
+function focusOrOpen(id){
+  const existing=Object.values(wins).filter(w=>w.appId===id);
+  if(existing.length){
+    const w=existing[existing.length-1];
+    w.el.classList.remove('minimized');
+    w.el.style.zIndex=zTop++;
+  } else openApp(id);
+}
+
+function openApp(id){
+  winCount++;
+  const wid='w'+winCount;
+  const app=APPS.find(a=>a.id===id)||{icon:'?',name:id};
+  const el=document.createElement('div');
+  el.className='win'; el.id=wid;
+  el.style.zIndex=zTop++;
+  const offset=40+((winCount-1)*22)%180;
+  el.style.left=offset+'px'; el.style.top=offset+'px';
+  const sizes={calc:'300x440',sysinfo:'440x320',snake:'480x520',pong:'520x500',paint:'680x500'};
+  const [w,h]=(sizes[id]||'640x480').split('x');
+  el.style.width=w+'px'; el.style.height=h+'px';
+  el.innerHTML=`
+    <div class="titlebar">
+      <span class="title">${app.icon} ${app.name}</span>
+      <div class="winbtns">
+        <div class="winbtn min" title="Minimize" onclick="minimizeWin('${wid}')">−</div>
+        <div class="winbtn max" title="Maximize" onclick="maxWin('${wid}')">+</div>
+        <div class="winbtn close" title="Close" onclick="closeWin('${wid}')">✕</div>
+      </div>
+    </div>
+    <div class="wincontent" id="wc-${wid}"></div>`;
+  document.body.appendChild(el);
+  makeDraggable(el);
+  el.addEventListener('mousedown',()=>el.style.zIndex=zTop++);
+  wins[wid]={el,appId:id};
+  document.getElementById('tb-'+id)?.classList.add('active');
+  renderApp(id,wid);
+}
+
+function closeWin(wid){
+  const w=wins[wid]; if(!w)return;
+  if(w.cleanup)w.cleanup();
+  w.el.remove(); delete wins[wid];
+  const still=Object.values(wins).some(x=>x.appId===w.appId);
+  if(!still)document.getElementById('tb-'+w.appId)?.classList.remove('active');
+}
+function minimizeWin(wid){wins[wid]?.el.classList.toggle('minimized');}
+function maxWin(wid){
+  const el=wins[wid]?.el; if(!el)return;
+  if(el.dataset.maxed){
+    el.style.cssText=el.dataset.prev; delete el.dataset.maxed;
+  } else {
+    el.dataset.prev=el.style.cssText; el.dataset.maxed='1';
+    el.style.cssText=`left:0;top:0;width:100vw;height:calc(100vh - 56px);border-radius:0;z-index:${zTop++};`;
+  }
+}
+
+function makeDraggable(win){
+  const bar=win.querySelector('.titlebar');
+  let ox=0,oy=0,dragging=false;
+  bar.addEventListener('mousedown',e=>{
+    if(e.target.classList.contains('winbtn'))return;
+    dragging=true; ox=e.clientX-win.offsetLeft; oy=e.clientY-win.offsetTop;
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!dragging)return;
+    win.style.left=(e.clientX-ox)+'px';
+    win.style.top=Math.max(0,e.clientY-oy)+'px';
+  });
+  document.addEventListener('mouseup',()=>dragging=false);
+}
+
+function renderApp(id,wid){
+  const c=document.getElementById('wc-'+wid);
+  ({code:renderCode,files:renderFiles,browser:renderBrowser,notepad:renderNotepad,
+    calc:renderCalc,snake:renderSnake,pong:renderPong,paint:renderPaint,sysinfo:renderSysInfo}[id]||((c)=>c.innerHTML='<p style="padding:20px;opacity:.5">App not found</p>'))(c,wid);
+}
+
+/* ─── CODE EDITOR ─── */
+function renderCode(c,wid){
+  c.style.cssText='padding:10px;display:flex;flex-direction:column;gap:6px;';
+  c.innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <select id="lang-${wid}">
+        <option value="html">HTML</option>
+        <option value="python">Python</option>
+        <option value="js">JavaScript</option>
+      </select>
+      <button onclick="runCode('${wid}')">▶ Run</button>
+      <button onclick="document.getElementById('out-${wid}').innerHTML=''">Clear</button>
+      <span class="py-status" style="font-size:11px;opacity:.5;">${pyReady?'Python ready ✓':'Loading Python...'}</span>
+    </div>
+    <textarea id="code-${wid}" style="flex:1;min-height:200px;font-size:13px;line-height:1.5" placeholder="Write code here..."></textarea>
+    <div class="output-box" id="out-${wid}" style="height:130px;border-radius:6px;"></div>`;
+  if(!pyReady){
+    const si=setInterval(()=>{
+      if(pyReady){
+        c.querySelectorAll('.py-status').forEach(el=>el.textContent='Python ready ✓');
+        clearInterval(si);
+      }
+    },500);
+  }
+}
+
+async function runCode(wid){
+  const code=document.getElementById('code-'+wid)?.value||'';
+  const lang=document.getElementById('lang-'+wid)?.value;
+  const out=document.getElementById('out-'+wid);
+  if(!out)return;
+  if(lang==='html'){out.innerHTML=code; return;}
+  if(lang==='js'){
+    const logs=[]; const orig=console.log;
+    console.log=(...a)=>logs.push(a.map(String).join(' '));
+    try{const r=eval(code); if(r!==undefined)logs.push(String(r));}
+    catch(e){logs.push('❌ '+e.message);}
+    console.log=orig;
+    out.textContent=logs.join('\n')||'(no output)';
+    return;
+  }
+  if(lang==='python'){
+    if(!pyReady){out.textContent='⏳ Python still loading...'; return;}
+    out.textContent='Running...';
+    try{
+      await pyodide.runPythonAsync(`
+import sys, io
+_buf = io.StringIO()
+sys.stdout = _buf
+try:
+    exec(${JSON.stringify(code)})
+except Exception as e:
+    print(f'Error: {e}')
+finally:
+    sys.stdout = sys.__stdout__
+    _result = _buf.getvalue()
+`);
+      out.textContent=pyodide.globals.get('_result')||'(no output)';
+    }catch(e){out.textContent='❌ '+e.message;}
+  }
+}
+
+/* ─── FILE MANAGER ─── */
+function renderFiles(c,wid){
+  wins[wid].fsPath=[]; wins[wid].selFile=null;
+  c.style.cssText='display:flex;flex-direction:column;';
+  c.innerHTML=`
+    <div style="display:flex;gap:6px;padding:8px;background:#2a2a3e;align-items:center;flex-shrink:0;">
+      <button onclick="fsBack('${wid}')">← Back</button>
+      <span id="fpath-${wid}" style="font-size:12px;opacity:.6;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">~/</span>
+      <button onclick="fsNewItem('${wid}','file')">+ File</button>
+      <button onclick="fsNewItem('${wid}','folder')">+ Folder</button>
+      <button onclick="fsDelete('${wid}')" style="color:#f87171;border-color:rgba(248,113,113,.3);">🗑</button>
+    </div>
+    <div id="flist-${wid}" style="flex:1;overflow:auto;padding:8px;"></div>
+    <div id="fedit-${wid}" style="display:none;flex-direction:column;gap:6px;padding:8px;border-top:1px solid rgba(255,255,255,.1);">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span id="fedit-name-${wid}" style="font-size:13px;font-weight:500;flex:1;"></span>
+        <button onclick="fsSave('${wid}')">💾 Save</button>
+        <button onclick="document.getElementById('fedit-${wid}').style.display='none'">✕</button>
+      </div>
+      <textarea id="fedit-ta-${wid}" style="height:130px;font-size:12px;user-select:text;"></textarea>
+    </div>`;
+  fsRender(wid);
+}
+
+function fsCurrent(wid){
+  let node=FS;
+  for(const p of wins[wid].fsPath||[])node=node[p]?.children;
+  return node;
+}
+
+function fsRender(wid){
+  const path=wins[wid].fsPath||[];
+  const pEl=document.getElementById('fpath-'+wid);
+  if(pEl)pEl.textContent='~/'+(path.length?path.join('/'):'');
+  const node=fsCurrent(wid);
+  const list=document.getElementById('flist-'+wid);
+  if(!list||!node)return;
+  list.innerHTML='';
+  if(!Object.keys(node).length){
+    list.innerHTML='<div style="padding:20px;opacity:.4;font-size:13px;">Empty folder</div>';
+    return;
+  }
+  Object.entries(node).sort((a,b)=>{
+    if(a[1].type===b[1].type)return a[0].localeCompare(b[0]);
+    return a[1].type==='folder'?-1:1;
+  }).forEach(([name,item])=>{
+    const div=document.createElement('div');
+    div.className='file-item';
+    div.innerHTML=`<span style="font-size:16px;">${item.type==='folder'?'📁':'📄'}</span><span style="flex:1;">${name}</span>`;
+    div.onclick=()=>{
+      list.querySelectorAll('.file-item').forEach(x=>x.classList.remove('selected'));
+      div.classList.add('selected');
+      wins[wid].selFile=name;
+    };
+    div.ondblclick=()=>{
+      if(item.type==='folder'){wins[wid].fsPath.push(name); fsRender(wid);}
+      else fsOpenFile(wid,name,item);
+    };
+    list.appendChild(div);
+  });
+}
+
+function fsOpenFile(wid,name,item){
+  // Open .py or .html directly in Code Editor
+  if(name.endsWith('.py')||name.endsWith('.html')||name.endsWith('.js')){
+    winCount++;
+    const nwid='w'+winCount;
+    openApp('code');
+    setTimeout(()=>{
+      const ta=document.getElementById('code-'+nwid);
+      if(!ta)return;
+      ta.value=item.content;
+      const langEl=document.getElementById('lang-'+nwid);
+      if(langEl){
+        if(name.endsWith('.py'))langEl.value='python';
+        else if(name.endsWith('.html'))langEl.value='html';
+        else langEl.value='js';
+      }
+    },50);
+    return;
+  }
+  const ed=document.getElementById('fedit-'+wid);
+  const ta=document.getElementById('fedit-ta-'+wid);
+  const nn=document.getElementById('fedit-name-'+wid);
+  if(!ed)return;
+  ed.style.display='flex';
+  nn.textContent=name;
+  ta.value=item.content||'';
+  wins[wid].editFile=name;
+}
+
+function fsSave(wid){
+  const ta=document.getElementById('fedit-ta-'+wid);
+  const node=fsCurrent(wid);
+  if(node&&wins[wid].editFile)node[wins[wid].editFile].content=ta.value;
+}
+
+function fsBack(wid){
+  if((wins[wid].fsPath||[]).length>0){wins[wid].fsPath.pop(); fsRender(wid);}
+}
+
+function fsNewItem(wid,type){
+  const name=prompt(type==='file'?'File name (e.g. notes.txt):':'Folder name:');
+  if(!name)return;
+  const node=fsCurrent(wid);
+  node[name]=type==='file'?{type:'file',content:''}:{type:'folder',children:{}};
+  fsRender(wid);
+}
+
+function fsDelete(wid){
+  const name=wins[wid].selFile;
+  if(!name){alert('Select a file first.');return;}
+  if(!confirm('Delete "'+name+'"?'))return;
+  delete fsCurrent(wid)[name];
+  wins[wid].selFile=null;
+  fsRender(wid);
+}
+
+/* ─── BROWSER ─── */
+function renderBrowser(c,wid){
+  const BOOKMARKS=[
+    {name:'Wikipedia',url:'https://en.m.wikipedia.org/wiki/Main_Page'},
+    {name:'OpenStreetMap',url:'https://www.openstreetmap.org/export/embed.html'},
+    {name:'Hacker News',url:'https://news.ycombinator.com'},
+    {name:'example.com',url:'https://example.com'},
+  ];
+  c.style.cssText='display:flex;flex-direction:column;';
+  c.innerHTML=`
+    <div style="display:flex;gap:6px;padding:8px;background:#2a2a3e;align-items:center;flex-shrink:0;">
+      <button onclick="brBack('${wid}')">←</button>
+      <button onclick="brFwd('${wid}')">→</button>
+      <button onclick="brReload('${wid}')">↺</button>
+      <input type="text" id="burl-${wid}" style="flex:1;height:30px;font-size:12px;" placeholder="Enter URL or search with Google...">
+      <button onclick="brGo('${wid}')">Go</button>
+    </div>
+    <div style="display:flex;gap:4px;padding:4px 8px;background:#242436;flex-shrink:0;flex-wrap:wrap;">
+      ${BOOKMARKS.map(s=>`<button onclick="brLoad('${wid}','${s.url}')" style="font-size:11px;padding:3px 8px;">${s.name}</button>`).join('')}
+    </div>
+    <div style="flex:1;position:relative;background:#0d1117;">
+      <iframe id="br-${wid}" style="width:100%;height:100%;border:none;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+      <div id="br-overlay-${wid}" style="display:none;position:absolute;inset:0;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:13px;opacity:.6;">
+        <div style="font-size:32px;">🚫</div>
+        <div>This site blocks embedding.</div>
+        <a id="br-extlink-${wid}" href="#" onclick="openExternal('${wid}')" style="color:#60a5fa;">Open in new tab instead</a>
+      </div>
+    </div>`;
+  const inp=document.getElementById('burl-'+wid);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')brGo(wid);});
+  const frm=document.getElementById('br-'+wid);
+  frm.addEventListener('load',()=>{
+    try{frm.contentDocument; document.getElementById('br-overlay-'+wid).style.display='none';}
+    catch(e){document.getElementById('br-overlay-'+wid).style.display='flex';}
+  });
+}
+
+function brLoad(wid,url){
+  document.getElementById('burl-'+wid).value=url;
+  document.getElementById('br-'+wid).src=url;
+  wins[wid].lastUrl=url;
+}
+function brGo(wid){
+  let url=(document.getElementById('burl-'+wid)?.value||'').trim();
+  if(!url)return;
+  if(!url.includes('.')&&!url.startsWith('http'))url='https://www.google.com/search?q='+encodeURIComponent(url);
+  else if(!url.startsWith('http'))url='https://'+url;
+  brLoad(wid,url);
+}
+function brBack(wid){try{document.getElementById('br-'+wid)?.contentWindow.history.back();}catch(e){}}
+function brFwd(wid) {try{document.getElementById('br-'+wid)?.contentWindow.history.forward();}catch(e){}}
+function brReload(wid){try{document.getElementById('br-'+wid)?.contentWindow.location.reload();}catch(e){const f=document.getElementById('br-'+wid);f.src=f.src;}}
+function openExternal(wid){window.open(wins[wid].lastUrl,'_blank');}
+
+/* ─── NOTEPAD ─── */
+function renderNotepad(c,wid){
+  c.style.cssText='display:flex;flex-direction:column;padding:8px;gap:6px;';
+  c.innerHTML=`
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <button onclick="npSave('${wid}')">💾 Save to Files</button>
+      <button onclick="npOpen('${wid}')">📂 Open</button>
+      <select id="np-font-${wid}" onchange="npFont('${wid}')">
+        <option value="'Cascadia Code',monospace">Mono</option>
+        <option value="'Segoe UI',sans-serif">Sans</option>
+        <option value="Georgia,serif">Serif</option>
+      </select>
+      <select id="np-size-${wid}" onchange="npSize('${wid}')">
+        <option value="12">12px</option>
+        <option value="14" selected>14px</option>
+        <option value="16">16px</option>
+        <option value="18">18px</option>
+      </select>
+    </div>
+    <textarea id="np-ta-${wid}" style="flex:1;font-size:14px;line-height:1.6;user-select:text;" placeholder="Start typing..."></textarea>
+    <div style="font-size:11px;opacity:.4;" id="np-stat-${wid}">0 words · 0 chars</div>`;
+  const ta=document.getElementById('np-ta-'+wid);
+  ta.addEventListener('input',()=>{
+    const v=ta.value;
+    const words=v.trim()?v.trim().split(/\s+/).length:0;
+    const st=document.getElementById('np-stat-'+wid);
+    if(st)st.textContent=words+' words · '+v.length+' chars';
+  });
+}
+function npSave(wid){
+  const v=document.getElementById('np-ta-'+wid)?.value||'';
+  const name=prompt('Save as:','untitled.txt'); if(!name)return;
+  FS.Documents.children[name]={type:'file',content:v};
+  alert('Saved to Documents/'+name);
+}
+function npOpen(wid){
+  const files=Object.keys(FS.Documents.children).filter(n=>FS.Documents.children[n].type==='file');
+  if(!files.length){alert('No files in Documents.');return;}
+  const name=prompt('Open file from Documents:\n'+files.join(', '),'readme.txt'); if(!name)return;
+  const f=FS.Documents.children[name];
+  if(!f){alert('File not found.');return;}
+  const ta=document.getElementById('np-ta-'+wid);
+  if(ta)ta.value=f.content;
+}
+function npFont(wid){
+  const ta=document.getElementById('np-ta-'+wid);
+  const sel=document.getElementById('np-font-'+wid);
+  if(ta&&sel)ta.style.fontFamily=sel.value;
+}
+function npSize(wid){
+  const ta=document.getElementById('np-ta-'+wid);
+  const sel=document.getElementById('np-size-'+wid);
+  if(ta&&sel)ta.style.fontSize=sel.value+'px';
+}
+
+/* ─── CALCULATOR ─── */
+function renderCalc(c,wid){
+  c.style.cssText='padding:12px;display:flex;flex-direction:column;gap:8px;';
+  c.innerHTML=`
+    <div id="calc-hist-${wid}" style="min-height:18px;text-align:right;font-size:12px;opacity:.45;padding:0 4px;"></div>
+    <div id="calc-disp-${wid}" style="background:#0d1117;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:12px 16px;text-align:right;font-size:32px;font-weight:300;min-height:60px;word-break:break-all;overflow:hidden;">0</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;" id="calc-grid-${wid}"></div>`;
+  const st={op:'rgba(96,165,250,.8)',eq:'rgba(52,211,153,.8)',fn:'rgba(255,255,255,.2)',num:'rgba(255,255,255,.08)'};
+  const layout=[
+    ['C','fn'],['±','fn'],['%','fn'],['÷','op'],
+    ['7','num'],['8','num'],['9','num'],['×','op'],
+    ['4','num'],['5','num'],['6','num'],['−','op'],
+    ['1','num'],['2','num'],['3','num'],['+','op'],
+    ['0','num','wide'],['.','num'],['=','eq'],
+  ];
+  const grid=document.getElementById('calc-grid-'+wid);
+  wins[wid].calcState={expr:'',prev:'',op:null,newNum:true};
+  layout.forEach(([lbl,type,wide])=>{
+    const btn=document.createElement('button');
+    btn.textContent=lbl;
+    if(wide)btn.style.gridColumn='span 2';
+    btn.style.cssText+=`background:${st[type]};color:white;border:none;border-radius:8px;padding:12px;font-size:18px;cursor:pointer;transition:filter .1s;`;
+    btn.onmouseenter=()=>btn.style.filter='brightness(1.2)';
+    btn.onmouseleave=()=>btn.style.filter='';
+    btn.onclick=()=>calcPress(wid,lbl);
+    grid.appendChild(btn);
+  });
+  // Keyboard
+  const handler=e=>{
+    const map={'Enter':'=','Backspace':'C','Escape':'C','/':'÷','*':'×','-':'−'};
+    const k=map[e.key]||e.key;
+    if('0123456789.+-=÷×−C%'.includes(k))calcPress(wid,k);
+  };
+  document.addEventListener('keydown',handler);
+  wins[wid].cleanup=()=>document.removeEventListener('keydown',handler);
+}
+function calcPress(wid,k){
+  const s=wins[wid].calcState;
+  const disp=document.getElementById('calc-disp-'+wid);
+  const hist=document.getElementById('calc-hist-'+wid);
+  const cur=()=>disp.textContent;
+  const set=(v)=>disp.textContent=String(v);
+  if(k==='C'){set('0');s.expr='';s.op=null;s.prev='';s.newNum=true;hist.textContent='';return;}
+  if(k==='±'){set(cur()==='0'?'0':String(parseFloat(cur())*-1));return;}
+  if(k==='%'){set(String(parseFloat(cur())/100));return;}
+  if(['÷','×','−','+'].includes(k)){
+    s.prev=cur(); s.op=k; s.newNum=true;
+    hist.textContent=cur()+' '+k;
+    return;
+  }
+  if(k==='='){
+    if(!s.op||!s.prev)return;
+    const a=parseFloat(s.prev), b=parseFloat(cur());
+    const res={'+':a+b,'−':a-b,'×':a*b,'÷':b===0?'Error':a/b}[s.op];
+    hist.textContent=s.prev+' '+s.op+' '+cur()+' =';
+    set(typeof res==='number'?parseFloat(res.toPrecision(12)):res);
+    s.op=null; s.prev=''; s.newNum=true;
+    return;
+  }
+  if(k==='.'){
+    if(s.newNum){set('0.');s.newNum=false;return;}
+    if(!cur().includes('.'))set(cur()+'.');
+    return;
+  }
+  if(s.newNum){set(k);s.newNum=false;}
+  else set(cur()==='0'?k:cur()+k);
+}
+
+/* ─── SNAKE ─── */
+function renderSnake(c,wid){
+  c.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:10px;background:#0d1117;';
+  c.innerHTML=`
+    <div style="display:flex;gap:16px;font-size:13px;opacity:.7;">
+      <span>Score: <b id="snake-score-${wid}">0</b></span>
+      <span>Best: <b id="snake-best-${wid}">0</b></span>
+    </div>
+    <canvas id="snake-canvas-${wid}" width="400" height="400" style="border:1px solid rgba(255,255,255,.15);border-radius:6px;"></canvas>
+    <div style="font-size:12px;opacity:.45;">Arrow keys or WASD to move · R to restart</div>`;
+  const CELL=20, COLS=20, ROWS=20;
+  const canvas=document.getElementById('snake-canvas-'+wid);
+  const ctx=canvas.getContext('2d');
+  let snake,dir,food,score,best=0,interval,alive;
+  function startGame(){
+    snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+    dir={x:1,y:0}; score=0; alive=true;
+    placeFood(); render();
+    clearInterval(interval);
+    interval=setInterval(step,120);
+  }
+  function placeFood(){
+    do{food={x:Math.floor(Math.random()*COLS),y:Math.floor(Math.random()*ROWS)};}
+    while(snake.some(s=>s.x===food.x&&s.y===food.y));
+  }
+  function step(){
+    if(!alive)return;
+    const head={x:(snake[0].x+dir.x+COLS)%COLS,y:(snake[0].y+dir.y+ROWS)%ROWS};
+    if(snake.some(s=>s.x===head.x&&s.y===head.y)){alive=false;render();return;}
+    snake.unshift(head);
+    if(head.x===food.x&&head.y===food.y){score++;if(score>best)best=score;document.getElementById('snake-best-'+wid).textContent=best;document.getElementById('snake-score-'+wid).textContent=score;placeFood();}
+    else snake.pop();
+    render();
+  }
+  function render(){
+    ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,400,400);
+    snake.forEach((s,i)=>{
+      ctx.fillStyle=i===0?'#4ade80':'#22c55e';
+      ctx.fillRect(s.x*CELL+1,s.y*CELL+1,CELL-2,CELL-2);
+      if(i===0){ctx.fillStyle='#0d1117';ctx.fillRect(s.x*CELL+4+dir.y*2,s.y*CELL+4+dir.x*(-2),3,3);ctx.fillRect(s.x*CELL+4+dir.y*(-2),s.y*CELL+4+dir.x*2,3,3);}
+    });
+    ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.arc(food.x*CELL+CELL/2,food.y*CELL+CELL/2,CELL/2-2,0,Math.PI*2); ctx.fill();
+    if(!alive){
+      ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(0,0,400,400);
+      ctx.fillStyle='white'; ctx.font='bold 28px Segoe UI'; ctx.textAlign='center';
+      ctx.fillText('Game Over',200,180);
+      ctx.font='16px Segoe UI'; ctx.fillText('Score: '+score,200,215);
+      ctx.fillText('Press R to restart',200,245);
+    }
+  }
+  const handler=e=>{
+    const maps={ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},w:{x:0,y:-1},s:{x:0,y:1},a:{x:-1,y:0},d:{x:1,y:0}};
+    const nd=maps[e.key];
+    if(nd){e.preventDefault();if(nd.x!=-dir.x||nd.y!=-dir.y)dir=nd;}
+    if(e.key==='r'||e.key==='R')startGame();
+  };
+  document.addEventListener('keydown',handler);
+  wins[wid].cleanup=()=>{clearInterval(interval);document.removeEventListener('keydown',handler);};
+  startGame();
+}
+
+/* ─── PONG ─── */
+function renderPong(c,wid){
+  c.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:10px;background:#0d1117;';
+  c.innerHTML=`
+    <div style="display:flex;gap:30px;font-size:14px;opacity:.7;">
+      <span>Player: <b id="pong-ps-${wid}">0</b></span>
+      <span>CPU: <b id="pong-cs-${wid}">0</b></span>
+    </div>
+    <canvas id="pong-canvas-${wid}" width="460" height="340" style="border:1px solid rgba(255,255,255,.15);border-radius:6px;"></canvas>
+    <div style="font-size:12px;opacity:.45;">W/S or ↑/↓ to move · Click to start</div>`;
+  const W=460,H=340,PW=10,PH=70,BALL=8,SPEED=4;
+  const canvas=document.getElementById('pong-canvas-'+wid);
+  const ctx=canvas.getContext('2d');
+  let ps=0,cs=0,running=false;
+  let pl={x:12,y:H/2-PH/2}, cpu={x:W-PW-12,y:H/2-PH/2};
+  let ball={x:W/2,y:H/2,vx:SPEED*(Math.random()>.5?1:-1),vy:SPEED*(Math.random()>.5?1:-1)};
+  let upK=false,dnK=false;
+  function draw(){
+    ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='rgba(255,255,255,.1)'; ctx.setLineDash([6,6]); ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='white';
+    ctx.fillRect(pl.x,pl.y,PW,PH);
+    ctx.fillRect(cpu.x,cpu.y,PW,PH);
+    ctx.beginPath(); ctx.arc(ball.x,ball.y,BALL,0,Math.PI*2); ctx.fill();
+    if(!running){ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(0,0,W,H);ctx.fillStyle='white';ctx.font='16px Segoe UI';ctx.textAlign='center';ctx.fillText('Click to play',W/2,H/2);}
+  }
+  function step(){
+    if(!running)return;
+    if(upK)pl.y=Math.max(0,pl.y-5);
+    if(dnK)pl.y=Math.min(H-PH,pl.y+5);
+    const cpuCenter=cpu.y+PH/2;
+    if(cpuCenter<ball.y-6)cpu.y=Math.min(H-PH,cpu.y+3.5);
+    else if(cpuCenter>ball.y+6)cpu.y=Math.max(0,cpu.y-3.5);
+    ball.x+=ball.vx; ball.y+=ball.vy;
+    if(ball.y-BALL<0||ball.y+BALL>H)ball.vy*=-1;
+    if(ball.x-BALL<pl.x+PW&&ball.y>pl.y&&ball.y<pl.y+PH&&ball.vx<0){ball.vx*=-1;ball.vy+=((ball.y-(pl.y+PH/2))/PH)*3;}
+    if(ball.x+BALL>cpu.x&&ball.y>cpu.y&&ball.y<cpu.y+PH&&ball.vx>0){ball.vx*=-1;ball.vy+=((ball.y-(cpu.y+PH/2))/PH)*3;}
+    if(ball.x<0){cs++;document.getElementById('pong-cs-'+wid).textContent=cs;resetBall();}
+    if(ball.x>W){ps++;document.getElementById('pong-ps-'+wid).textContent=ps;resetBall();}
+    draw();
+  }
+  function resetBall(){ball={x:W/2,y:H/2,vx:SPEED*(Math.random()>.5?1:-1),vy:SPEED*(Math.random()>.5?1:-1)};}
+  canvas.onclick=()=>{running=!running;};
+  const kd=e=>{if(e.key==='w'||e.key==='ArrowUp'){upK=true;e.preventDefault();}if(e.key==='s'||e.key==='ArrowDown'){dnK=true;e.preventDefault();}};
+  const ku=e=>{if(e.key==='w'||e.key==='ArrowUp')upK=false;if(e.key==='s'||e.key==='ArrowDown')dnK=false;};
+  document.addEventListener('keydown',kd);
+  document.addEventListener('keyup',ku);
+  const interval=setInterval(step,16);
+  wins[wid].cleanup=()=>{clearInterval(interval);document.removeEventListener('keydown',kd);document.removeEventListener('keyup',ku);};
+  draw();
+}
+
+/* ─── PAINT ─── */
+function renderPaint(c,wid){
+  c.style.cssText='display:flex;flex-direction:column;';
+  const colors=['#ffffff','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#000000','#6b7280'];
+  c.innerHTML=`
+    <div style="display:flex;gap:6px;padding:6px 8px;background:#2a2a3e;align-items:center;flex-wrap:wrap;flex-shrink:0;">
+      <select id="pt-tool-${wid}" style="font-size:12px;">
+        <option value="pen">✏️ Pen</option>
+        <option value="eraser">🧹 Eraser</option>
+        <option value="fill">🪣 Fill</option>
+        <option value="rect">▭ Rect</option>
+        <option value="circle">○ Circle</option>
+        <option value="line">╱ Line</option>
+      </select>
+      <input type="range" id="pt-size-${wid}" min="1" max="40" value="4" style="width:70px;" title="Brush size">
+      <div style="display:flex;gap:3px;flex-wrap:wrap;">
+        ${colors.map(col=>`<div onclick="ptColor('${wid}','${col}')" style="width:18px;height:18px;background:${col};border-radius:3px;cursor:pointer;border:2px solid transparent;" data-col="${col}"></div>`).join('')}
+      </div>
+      <input type="color" id="pt-custom-${wid}" value="#ffffff" title="Custom color" style="width:28px;height:28px;border:none;background:none;cursor:pointer;padding:0;">
+      <button onclick="ptClear('${wid}')">🗑 Clear</button>
+      <button onclick="ptDownload('${wid}')">💾 Save PNG</button>
+    </div>
+    <canvas id="pt-canvas-${wid}" style="flex:1;cursor:crosshair;background:white;"></canvas>`;
+  const canvas=document.getElementById('pt-canvas-'+wid);
+  const colorPicker=document.getElementById('pt-custom-'+wid);
+  colorPicker.addEventListener('input',()=>ptColor(wid,colorPicker.value));
+  const ctx=canvas.getContext('2d');
+  let ptState={color:'#000000',size:4,drawing:false,sx:0,sy:0,snapshot:null};
+  function resize(){canvas.width=canvas.offsetWidth;canvas.height=canvas.offsetHeight;ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);}
+  setTimeout(resize,50);
+  function getPos(e){const r=canvas.getBoundingClientRect();const te=e.touches?e.touches[0]:e;return{x:te.clientX-r.left,y:te.clientY-r.top};}
+  function floodFill(x,y,fc){
+    x=Math.floor(x);y=Math.floor(y);
+    const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+    const d=imgData.data;
+    const idx=(y*canvas.width+x)*4;
+    const tr=d[idx],tg=d[idx+1],tb=d[idx+2],ta=d[idx+3];
+    const r=parseInt(fc.slice(1,3),16),g=parseInt(fc.slice(3,5),16),b=parseInt(fc.slice(5,7),16);
+    if(tr===r&&tg===g&&tb===b)return;
+    const stack=[[x,y]];
+    while(stack.length){
+      const [cx,cy]=stack.pop();
+      if(cx<0||cy<0||cx>=canvas.width||cy>=canvas.height)continue;
+      const ci=(cy*canvas.width+cx)*4;
+      if(d[ci]!==tr||d[ci+1]!==tg||d[ci+2]!==tb||d[ci+3]!==ta)continue;
+      d[ci]=r;d[ci+1]=g;d[ci+2]=b;d[ci+3]=255;
+      stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+  canvas.addEventListener('mousedown',e=>{
+    ptState.drawing=true;
+    const p=getPos(e);ptState.sx=p.x;ptState.sy=p.y;
+    const tool=document.getElementById('pt-tool-'+wid).value;
+    if(tool==='fill'){floodFill(p.x,p.y,ptState.color);return;}
+    ptState.snapshot=ctx.getImageData(0,0,canvas.width,canvas.height);
+    if(tool==='pen'||tool==='eraser'){ctx.beginPath();ctx.moveTo(p.x,p.y);}
+  });
+  canvas.addEventListener('mousemove',e=>{
+    if(!ptState.drawing)return;
+    const p=getPos(e);
+    const tool=document.getElementById('pt-tool-'+wid).value;
+    const size=parseInt(document.getElementById('pt-size-'+wid).value);
+    ctx.lineWidth=size; ctx.lineCap='round'; ctx.lineJoin='round';
+    if(tool==='pen'){ctx.strokeStyle=ptState.color;ctx.lineTo(p.x,p.y);ctx.stroke();}
+    else if(tool==='eraser'){ctx.strokeStyle='white';ctx.lineTo(p.x,p.y);ctx.stroke();}
+    else if(tool==='rect'||tool==='circle'||tool==='line'){
+      ctx.putImageData(ptState.snapshot,0,0);
+      ctx.strokeStyle=ptState.color; ctx.fillStyle=ptState.color+'44';
+      if(tool==='rect'){ctx.beginPath();ctx.rect(ptState.sx,ptState.sy,p.x-ptState.sx,p.y-ptState.sy);ctx.stroke();ctx.fill();}
+      else if(tool==='circle'){ctx.beginPath();ctx.ellipse((ptState.sx+p.x)/2,(ptState.sy+p.y)/2,Math.abs(p.x-ptState.sx)/2,Math.abs(p.y-ptState.sy)/2,0,0,Math.PI*2);ctx.stroke();ctx.fill();}
+      else if(tool==='line'){ctx.beginPath();ctx.moveTo(ptState.sx,ptState.sy);ctx.lineTo(p.x,p.y);ctx.stroke();}
+    }
+  });
+  canvas.addEventListener('mouseup',()=>ptState.drawing=false);
+  canvas.addEventListener('mouseleave',()=>ptState.drawing=false);
+  wins[wid].ptState=ptState;
+}
+function ptColor(wid,col){
+  const s=wins[wid]?.ptState;
+  if(s)s.color=col;
+}
+function ptClear(wid){
+  const canvas=document.getElementById('pt-canvas-'+wid);
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='white'; ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+function ptDownload(wid){
+  const canvas=document.getElementById('pt-canvas-'+wid);
+  if(!canvas)return;
+  const a=document.createElement('a'); a.download='paint.png'; a.href=canvas.toDataURL(); a.click();
+}
+
+/* ─── SYSTEM INFO ─── */
+function renderSysInfo(c,wid){
+  const ua=navigator.userAgent;
+  const cores=navigator.hardwareConcurrency||'?';
+  const ram=navigator.deviceMemory||'?';
+  const lang=navigator.language;
+  const platform=navigator.platform||'Web';
+  const info=[
+    ['OS','Windows 12 Web (Simulated)'],
+    ['Browser',ua.includes('Chrome')?'Chrome':ua.includes('Firefox')?'Firefox':ua.includes('Safari')?'Safari':'Unknown'],
+    ['Platform',platform],
+    ['CPU Cores',cores],
+    ['RAM',ram+'GB (approx.)'],
+    ['Language',lang],
+    ['Screen',screen.width+'×'+screen.height],
+    ['Viewport',window.innerWidth+'×'+window.innerHeight],
+    ['Color Depth',screen.colorDepth+'-bit'],
+    ['Timezone',Intl.DateTimeFormat().resolvedOptions().timeZone],
+    ['Python',pyReady?'Loaded (Pyodide)':'Loading...'],
+  ];
+  c.style.cssText='padding:16px;overflow:auto;';
+  c.innerHTML=`<div style="font-size:13px;font-weight:500;opacity:.5;margin-bottom:12px;">System Information</div>`+
+  info.map(([k,v])=>`
+    <div style="display:flex;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px;">
+      <span style="width:130px;opacity:.5;flex-shrink:0;">${k}</span>
+      <span>${v}</span>
+    </div>`).join('');
+}
+
+</script>
+</body>
+</html>
